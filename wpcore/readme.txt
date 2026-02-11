@@ -6,7 +6,7 @@ Author URI: https://wpcore.com
 Author: Stuart Starr
 Contributors: stueynet
 Requires at least: 3.5
-Tested up to: 6.5.2
+Tested up to: 6.8.1
 Stable tag: 1.9.2
 License: GPLv3
 License URI: http://www.gnu.org/licenses/gpl.html
