@@ -1,29 +1,39 @@
 <?php
 /**
- * Plugin Name: WPCore Plugin Manager
- * Plugin URI: https://wpcore.com
- * Description: Keep all your favorite plugins in one place and install them instantly on any site
- * Version: 1.9.2
- * Author: Stuart Starr
- * Author URI: http://stuey.net
- * License: GPL2
+ * Plugin Name:       WPCore Plugin Manager
+ * Plugin URI:        https://wpcore.com
+ * Description:       Install the plugins from your WPCore.com collections on any WordPress site.
+ * Version:           2.0.1
+ * Requires at least: 6.4
+ * Requires PHP:      7.4
+ * Author:            WPCore
+ * Author URI:        https://profiles.wordpress.org/stueynet/
+ * License:           GPL-2.0-or-later
+ * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain:       wpcore
+ *
+ * @package WPCore
  */
 
-
-// If this file is called directly, abort.
-if (! defined('WPINC')) {
-    die;
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
 }
 
+spl_autoload_register(
+	static function ( $class_name ) {
+		$prefix = 'WPCore\\';
 
+		if ( 0 !== strpos( $class_name, $prefix ) ) {
+			return;
+		}
 
-/**
- * Build settings
- */
-if (is_admin() && (! defined('DOING_AJAX') || ! DOING_AJAX)) {
-    require_once(plugin_dir_path(__FILE__) . 'lib/class-wpcore.php');
-    require_once(plugin_dir_path(__FILE__) . 'lib/TGM-Plugin-Activation-2.6.1/class-tgm-plugin-activation.php');
-    add_action('plugins_loaded', array( 'wpcore', 'get_instance' ));
-}
+		$relative_path = str_replace( '\\', '/', substr( $class_name, strlen( $prefix ) ) );
+		$file          = __DIR__ . '/src/' . $relative_path . '.php';
 
-require_once(plugin_dir_path(__FILE__) . 'lib/class-wpcli.php');
+		if ( is_readable( $file ) ) {
+			require $file;
+		}
+	}
+);
+
+WPCore\Plugin::boot( __FILE__ );

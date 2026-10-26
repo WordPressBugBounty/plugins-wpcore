@@ -1,160 +1,74 @@
 === WPCore Plugin Manager ===
-Plugin Name: WPCore Plugin Manager
-Plugin URI: https://wpcore.com
-Tags: plugins, installation, admin, administration, install, wpcore, plugin collections, plugin groups, plugin manager, bulk plugin installer, multisite, compatible
-Author URI: https://wpcore.com
-Author: Stuart Starr
 Contributors: stueynet
-Requires at least: 3.5
-Tested up to: 6.8.1
-Stable tag: 1.9.2
-License: GPLv3
-License URI: http://www.gnu.org/licenses/gpl.html
+Tags: plugin manager, plugin collections, bulk install, install plugins, wp-cli
+Requires at least: 6.4
+Tested up to: 7.1
+Requires PHP: 7.4
+Stable tag: 2.0.1
+License: GPLv2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Create plugin collections and install them in one click on any WordPress site.
+Install the plugins from your WPCore.com collections on any WordPress site.
 
 == Description ==
-WPCore is a tool that allows you to manage collections of WordPress plugins and then quickly install them on any WordPress site. You can generate your collections at https://wpcore.com and then import them to your WordPress site by copying and pasting your unique collection key in WordPress.
 
+WPCore stores lists of plugins called collections. You create collections at [wpcore.com](https://wpcore.com). Each collection has a key. Add the key to this plugin, and the plugin installs and activates the plugins in that collection.
+
+Collections can contain plugins from the WordPress.org directory and custom plugins uploaded to wpcore.com as ZIP files.
+
+= WP-CLI =
+
+`wp wpcore install <key>` installs the plugins in a collection from the command line. `wp wpcore list <key>` lists the plugins in a collection and their status on the site.
+
+= Source code =
+
+The plugin includes the uncompressed source of the admin screen JavaScript and styles in `assets/src/`. `build/` holds the compiled files.
+
+= External service =
+
+This plugin connects to the WPCore API at `https://wpcore.com/api/` to read the collections whose keys you add. The request contains the collection keys and the plugin version. No other site data is sent. The [WPCore terms](https://wpcore.com/terms) and [privacy policy](https://wpcore.com/privacy) apply.
 
 == Installation ==
-1. Download the plugin via https://wpcore.com/download.
-1. Upload the ZIP file through the \"Plugins > Add New > Upload\" screen in your WordPress dashboard.
-1. Activate the plugin through the \'Plugins\' menu in WordPress
-1. Generate a plugin collection https://wpcore.com/collections/create
-1. Add some plugins to that collection
-1. Copy the unique collection key
-1. In your WordPress admin panel visit Settings -> WPCore
-1. Add collection keys
-1. Install the plugins!
 
-== Frequently Asked Questions ==
-
-You'll find the [FAQ on WPcore.com](https://wpcore.com/help).
+1. In the WordPress admin, go to Plugins > Add New and search for "WPCore".
+2. Install and activate WPCore Plugin Manager.
+3. Create a collection at [wpcore.com](https://wpcore.com/collections/create) and add plugins to it.
+4. Copy the collection key.
+5. In the WordPress admin, go to WPCore and add the key.
+6. Select the plugins to install.
 
 == Screenshots ==
 
-1. Create plugin collections at wpcore.com
-2. Install them instantly on any WordPress site.
+1. Create collections of plugins at wpcore.com.
+2. The WPCore screen lists the plugins in each saved collection and shows which are installed and active.
+3. Install and activate the missing plugins of a collection. Each plugin shows its result.
 
 == Changelog ==
+
+= 2.0.1 =
+* The plugin includes the uncompressed source of the admin screen JavaScript and styles in `assets/src/`.
+
+= 2.0.0 =
+* Rebuilt the plugin.
+* Removed the TGM Plugin Activation library.
+* Each collection is cached for 12 hours. A key that matches no collection is cached for 1 hour.
+* A saved key that matches no collection is listed as not found.
+* Requests to wpcore.com verify the HTTPS certificate.
+* Deleting the plugin removes its data from every site in a multisite network.
+* Plugins install with the WordPress core plugin installer. Installed plugins are not downloaded again.
+* New WPCore screen: add and remove collection keys, select plugins, install or install and activate them, and see the result for each plugin.
+* Export links use plugin folder names, and the active plugins export includes network-activated plugins.
+
 = 1.9.2 =
-* Fixed a bug with PHP 8
+* Fixed a bug with PHP 8.
 
 = 1.9.1 =
-* Removed calls to screen_icon
+* Removed calls to screen_icon.
 
 = 1.9.0 =
-* Added WP-CLI support!
-
-= 1.8.2 =
-* Update textdomain so you see notices
-
-= 1.8.1 =
-* Update textdomain so you see notices
-
-= 1.8.0 =
-* Update to TGM plugin Activation version 2.6.1
-
-= 1.7.3 =
-* Add ability to export all plugins in addition to active plugins
-
-= 1.7.2 =
-* Update to version 2.5.2 of http://tgmpluginactivation.com/
-
-= 1.6.3 =
-* Remove wpcore_keys from options table upon plugin uninstall / delete
-
-= 1.6.2 =
-* Minor fix to ensure only users with the 'install_plugins' capability can see it
-
-= 1.6.0 =
-* Updated the TGM activation class to 2.4.2
-
-= 1.5.0 =
-* Fix for error on php 5.3 and below
-
-= 1.4.9 =
-* Merged pull request from cfoellmann/fixes and updated some urls for https
-
-= 1.4.8 =
-* Fixed conflict when other plugins or themes use the TGM activation plugin. The install plugins button always works now.
-
-= 1.4.7 =
-* Export active plugins to a WPCore.com collection.
-
-= 1.4.6 =
-* Tested on WordPress 3.9.2. Works!
-* Added some more input sanity(ization)
-
-= 1.4.5 =
-* Switched to ssl. Changed timeout.
-
-= 1.4.0 =
-* Further optimization. Now only 1 API call is made for all your collections. Dramatic speed increase in when saving collection keys.
-
-= 1.3.3 =
-* Increased cache timeout. Click clear cache button in settings to fetch latest collection info
-* Tested with Multisite
-
-= 1.3.2 =
-* Fixed issue where in some cases users were getting  Cannot redeclare wpcore_set_false()
-
-= 1.3.1 =
-* MAJOR PERFORMANCE UPDATE!
-* Completely restructured the plugin to use the WordPress transient cache
-* Will only make external calls to WPCore API when you save and edit your collection keys
-* Major speed improvement
-
-= 1.2.8 =
-* Reenabled the admin nag dismiss button.
-
-
-= 1.2.7 =
-* Updated Plugin name to alleviate some confusion between this plugin and the WordPress Core.
-
-= 1.2.6 =
-* Fixed bug that caused all the assets on the WordPress.org SVN to go missing. All good now.
-
-= 1.2.2 =
-* Updated readme again (sorry)
-
-= 1.2.1 =
-* Updated readme again (sorry)
-
-= 1.2 =
-* Updated readme
-
-= 1.1 =
-* Complete refactor. Adherence to all WP.org coding standards. More Object oriented.
-
-= 1.0 =
-* Using wp_remote_get and wp_remote_retrieve_body to grab stuff from wpcore.com
-
-= 0.7 =
-* Organized the menu. Put it near plugins cause that just makes sense.
-
-= 0.6 =
-* Fixed warning for undefined variable
-
-= 0.5 =
-* This is the first usable build
-* Add and edit multiple keys
-* Install tons of plugins all at once
-
-= 0.4 =
-* Hopefully fixed the changelog
-
-= 0.3 =
-* Nothing here either
-
-= 0.2 =
-* Not too much in this one
-
-= 0.1 =
-* First one
+* Added WP-CLI support.
 
 == Upgrade Notice ==
 
-= 1.3.1 =
-This is an major performance update. I have restructured the plugin to rely much less on external calls to wpcore.com. Please install asap. Report any issues!
+= 2.0.0 =
+New WPCore screen in the same menu place. Your saved collection keys are kept.
