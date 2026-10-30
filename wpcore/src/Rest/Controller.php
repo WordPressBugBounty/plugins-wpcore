@@ -18,12 +18,14 @@ use WPCore\Collections\Repository;
 use WPCore\Collections\Result;
 use WPCore\Installer\Installer;
 use WPCore\Installer\PluginStatus;
+use WPCore\Sites\Connection;
 
 /**
  * Registers the wpcore/v1 routes that the admin screen uses.
  *
  * Every route requires the install_plugins capability. The install route installs only plugins
- * listed in a saved collection, so a request cannot supply its own download URL.
+ * listed in a collection of the current mode, so a request cannot supply its own download URL.
+ * In site mode the collection key routes return 409, because the site page on WPCore.com assigns the collections.
  */
 final class Controller {
 
@@ -200,7 +202,7 @@ final class Controller {
 	}
 
 	/**
-	 * Returns the saved collections.
+	 * Returns the collections of the current mode.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 */
@@ -215,6 +217,10 @@ final class Controller {
 	 * @return WP_REST_Response|WP_Error
 	 */
 	public function add_collection( WP_REST_Request $request ) {
+		if ( Repository::MODE_SITE === Repository::mode() ) {
+			return self::site_mode_error();
+		}
+
 		$added = $this->repository->add_key( (string) $request['key'] );
 
 		if ( is_wp_error( $added ) ) {
@@ -228,15 +234,20 @@ final class Controller {
 	 * Removes a collection key and returns the saved collections.
 	 *
 	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response|WP_Error
 	 */
-	public function delete_collection( WP_REST_Request $request ): WP_REST_Response {
+	public function delete_collection( WP_REST_Request $request ) {
+		if ( Repository::MODE_SITE === Repository::mode() ) {
+			return self::site_mode_error();
+		}
+
 		$this->repository->remove_key( (string) $request['key'] );
 
 		return $this->collections_response( $this->repository->collections() );
 	}
 
 	/**
-	 * Returns the WordPress.org icon URLs of the WordPress.org plugins in the saved collections.
+	 * Returns the WordPress.org icon URLs of the WordPress.org plugins in the collections of the current mode.
 	 */
 	public function get_icons(): WP_REST_Response {
 		$slugs = array();
@@ -253,7 +264,7 @@ final class Controller {
 	}
 
 	/**
-	 * Installs one plugin from a saved collection.
+	 * Installs one plugin from a collection of the current mode.
 	 *
 	 * @param WP_REST_Request $request Request.
 	 * @return WP_REST_Response|WP_Error
@@ -278,9 +289,9 @@ final class Controller {
 	}
 
 	/**
-	 * Finds a plugin in a saved collection.
+	 * Finds a plugin in a collection of the current mode.
 	 *
-	 * @param string $key  Saved collection key.
+	 * @param string $key  Collection key.
 	 * @param string $slug Plugin slug.
 	 * @return CollectionPlugin|WP_Error
 	 */
@@ -298,7 +309,7 @@ final class Controller {
 		if ( null === $collection ) {
 			return new WP_Error(
 				'wpcore_collection_not_found',
-				__( 'No saved collection has this key.', 'wpcore' ),
+				__( 'No collection on this site has this key.', 'wpcore' ),
 				array( 'status' => 404 )
 			);
 		}
@@ -317,15 +328,32 @@ final class Controller {
 	}
 
 	/**
+	 * Returns the error for a collection key route in site mode.
+	 */
+	private static function site_mode_error(): WP_Error {
+		return new WP_Error(
+			'wpcore_site_mode',
+			__( 'This site is connected to WPCore.com. Assign collections to it on its site page on WPCore.com.', 'wpcore' ),
+			array( 'status' => 409 )
+		);
+	}
+
+	/**
 	 * Builds the response body for a collections result.
+	 *
+	 * In site mode, site_url is the site page on WPCore.com and unused_keys holds the keys saved in collections mode.
 	 *
 	 * @param Result $result Collections result.
 	 */
 	private function collections_response( Result $result ): WP_REST_Response {
-		$error = $result->error();
+		$error      = $result->error();
+		$connection = Connection::get();
 
 		return new WP_REST_Response(
 			array(
+				'mode'           => null === $connection ? Repository::MODE_COLLECTIONS : Repository::MODE_SITE,
+				'site_url'       => null === $connection ? null : Connection::site_page_url( $connection['uuid'] ),
+				'unused_keys'    => null === $connection ? array() : $this->repository->keys(),
 				'collections'    => array_values( array_map( array( $this, 'collection_data' ), $result->collections() ) ),
 				'not_found_keys' => $result->not_found_keys(),
 				'error'          => null === $error ? null : array(

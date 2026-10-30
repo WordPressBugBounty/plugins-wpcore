@@ -10,7 +10,7 @@ import { __, _n, sprintf } from '@wordpress/i18n';
 /**
  * Internal dependencies
  */
-import { rowId, statusCounts } from './install-queue';
+import { statusCounts } from './install-queue';
 import PluginRow from './plugin-row';
 
 /**
@@ -39,16 +39,18 @@ function CoverageBar( { counts, total } ) {
 }
 
 /**
- * Card with the plugins of one collection.
+ * Card with the plugins of one collection, or of every collection on the All tab.
+ *
+ * A plugin entry with a key installs from that collection. Other entries install from the card's collection.
  *
  * @param {Object}                                     props            Component props.
- * @param {Object}                                     props.collection Collection from the collections response.
+ * @param {Object}                                     props.collection Collection from the collections response, or the All tab entry with key, name and plugins from mergedPlugins().
  * @param {Object<string, string>}                     props.icons      WordPress.org icon URLs keyed by slug.
- * @param {Set<string>}                                props.selected   Selected row IDs.
- * @param {function(string[], boolean): void}          props.onSelect   Called with row IDs and true to select or false to clear.
+ * @param {Set<string>}                                props.selected   Selected slugs.
+ * @param {function(string[], boolean): void}          props.onSelect   Called with slugs and true to select or false to clear.
  * @param {function(Object[], boolean): Promise<void>} props.onInstall  Installs plugins. Called with the plugins and true to activate them.
  * @param {Object}                                     props.progress   Install progress keyed by slug.
- * @param {function(): void}                           props.onRemove   Removes the collection key.
+ * @param {function(): void}                           [props.onRemove] Removes the collection key. The All tab and site mode have none.
  * @param {boolean}                                    props.disabled   True while a request runs.
  * @return {Element} Collection card.
  */
@@ -69,7 +71,12 @@ export default function CollectionCard( {
 	const installedCount = counts.active + counts.inactive;
 	const selectableIds = collection.plugins
 		.filter( ( plugin ) => 'active' !== plugin.status )
-		.map( ( plugin ) => rowId( collection.key, plugin.slug ) );
+		.map( ( plugin ) => plugin.slug );
+	const toInstall = ( plugin ) => ( {
+		key: plugin.key || collection.key,
+		slug: plugin.slug,
+		name: plugin.name,
+	} );
 	const selectedCount = selectableIds.filter( ( id ) =>
 		selected.has( id )
 	).length;
@@ -82,19 +89,23 @@ export default function CollectionCard( {
 			<header className="wpcore-collection__header">
 				<div className="wpcore-collection__title">
 					<h2>{ name }</h2>
-					<div className="wpcore-collection__links">
-						<ExternalLink href={ collection.url }>
-							{ __( 'View on WPCore.com', 'wpcore' ) }
-						</ExternalLink>
-						<Button
-							variant="link"
-							isDestructive
-							onClick={ () => setConfirming( true ) }
-							disabled={ disabled }
-						>
-							{ __( 'Remove', 'wpcore' ) }
-						</Button>
-					</div>
+					{ collection.url && (
+						<div className="wpcore-collection__links">
+							<ExternalLink href={ collection.url }>
+								{ __( 'View on WPCore.com', 'wpcore' ) }
+							</ExternalLink>
+							{ onRemove && (
+								<Button
+									variant="link"
+									isDestructive
+									onClick={ () => setConfirming( true ) }
+									disabled={ disabled }
+								>
+									{ __( 'Remove', 'wpcore' ) }
+								</Button>
+							) }
+						</div>
+					) }
 				</div>
 				{ total > 0 && (
 					<div className="wpcore-collection__summary">
@@ -184,11 +195,7 @@ export default function CollectionCard( {
 												'not_installed' ===
 												plugin.status
 										)
-										.map( ( plugin ) => ( {
-											key: collection.key,
-											slug: plugin.slug,
-											name: plugin.name,
-										} ) ),
+										.map( toInstall ),
 									true
 								)
 							}
@@ -208,35 +215,22 @@ export default function CollectionCard( {
 
 			{ total > 0 && (
 				<ul className="wpcore-plugins">
-					{ collection.plugins.map( ( plugin ) => {
-						const id = rowId( collection.key, plugin.slug );
-
-						return (
-							<PluginRow
-								key={ id }
-								plugin={ plugin }
-								icon={ icons[ plugin.slug ] }
-								progress={ progress[ plugin.slug ] }
-								selected={ selected.has( id ) }
-								onSelect={ ( isSelected ) =>
-									onSelect( [ id ], isSelected )
-								}
-								onInstall={ ( activate ) =>
-									onInstall(
-										[
-											{
-												key: collection.key,
-												slug: plugin.slug,
-												name: plugin.name,
-											},
-										],
-										activate
-									)
-								}
-								disabled={ disabled }
-							/>
-						);
-					} ) }
+					{ collection.plugins.map( ( plugin ) => (
+						<PluginRow
+							key={ plugin.slug }
+							plugin={ plugin }
+							icon={ icons[ plugin.slug ] }
+							progress={ progress[ plugin.slug ] }
+							selected={ selected.has( plugin.slug ) }
+							onSelect={ ( isSelected ) =>
+								onSelect( [ plugin.slug ], isSelected )
+							}
+							onInstall={ ( activate ) =>
+								onInstall( [ toInstall( plugin ) ], activate )
+							}
+							disabled={ disabled }
+						/>
+					) ) }
 				</ul>
 			) }
 

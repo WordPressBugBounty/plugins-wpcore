@@ -10,11 +10,30 @@ namespace WPCore\Collections;
 use WP_Error;
 use WPCore\Api\Client;
 use WPCore\Api\Collection;
+use WPCore\Sites\Connection;
+use WPCore\Sites\Pusher;
 
 /**
- * Stores collection keys in the wpcore_keys option and caches each collection in a transient.
+ * Loads the collections of this site in one of two modes.
+ *
+ * Collections mode: the site is not connected to WPCore.com. The collections are the ones whose keys are saved in the
+ * wpcore_keys option. Each collection is cached in its own transient.
+ *
+ * Site mode: the site is connected to WPCore.com. The collections are the ones assigned to the site on its site page.
+ * Each sync with WPCore.com returns them, and Pusher saves them in a transient. The saved keys are kept but not used,
+ * so disconnecting returns the site to collections mode with the same keys.
  */
 final class Repository {
+
+	/**
+	 * Mode of a site that is not connected to WPCore.com.
+	 */
+	const MODE_COLLECTIONS = 'collections';
+
+	/**
+	 * Mode of a site that is connected to WPCore.com.
+	 */
+	const MODE_SITE = 'site';
 
 	/**
 	 * Option that holds the saved keys as an array of strings. Plugin 1.x uses the same option.
@@ -35,6 +54,24 @@ final class Repository {
 	 * Cache lifetime of a key that matched no collection in seconds: 1 hour.
 	 */
 	const NOT_FOUND_TTL = 3600;
+
+	/**
+	 * Transient that holds the collections assigned to the connected site, with the site UUID and the time they were read.
+	 */
+	const SITE_CACHE = 'wpcore_site_collections';
+
+	/**
+	 * Age in seconds after which the WPCore screen syncs again to read the assigned collections: 5 minutes.
+	 * A change on the site page shows on the WPCore screen within this time, or at once with Refresh.
+	 */
+	const SITE_FRESH_FOR = 300;
+
+	/**
+	 * HTTP statuses of a sync after which the cached assigned collections are deleted.
+	 * WPCore.com returns 401 for a wrong signature, 403 for a paused site, 404 when the site cannot sync,
+	 * 409 when the home URL of this site does not match the site address on WPCore.com, and 422 when the home URL is not valid.
+	 */
+	const SITE_REJECTED_STATUSES = array( 401, 403, 404, 409, 422 );
 
 	/**
 	 * API client.
@@ -59,6 +96,46 @@ final class Repository {
 	 */
 	public static function cache_name( string $key ): string {
 		return self::CACHE_PREFIX . strtolower( trim( $key ) );
+	}
+
+	/**
+	 * Returns MODE_SITE when the site is connected to WPCore.com, or MODE_COLLECTIONS when it is not.
+	 */
+	public static function mode(): string {
+		return null === Connection::get() ? self::MODE_COLLECTIONS : self::MODE_SITE;
+	}
+
+	/**
+	 * Deletes the cached collections of the connected site. Called when the site connects or disconnects, and when WPCore.com rejects a sync.
+	 */
+	public static function clear_site_cache(): void {
+		delete_transient( self::SITE_CACHE );
+	}
+
+	/**
+	 * Saves the collections from a sync response as the cached collections of the connected site.
+	 * The cache holds arrays, not objects, so a cached value never depends on a class definition.
+	 *
+	 * @param string                    $uuid        Site UUID.
+	 * @param array<string, Collection> $collections Collections keyed by collection key.
+	 */
+	public static function save_site_collections( string $uuid, array $collections ): void {
+		set_transient(
+			self::SITE_CACHE,
+			array(
+				'uuid'        => $uuid,
+				'read_at'     => time(),
+				'collections' => array_values(
+					array_map(
+						static function ( Collection $collection ): array {
+							return $collection->to_array();
+						},
+						$collections
+					)
+				),
+			),
+			self::CACHE_TTL
+		);
 	}
 
 	/**
@@ -117,12 +194,78 @@ final class Repository {
 	}
 
 	/**
-	 * Deletes the cached collection of every saved key.
+	 * Deletes the cached collection of every saved key, and the cached collections of the connected site.
 	 */
 	public function clear_cache(): void {
 		foreach ( $this->keys() as $key ) {
 			delete_transient( self::cache_name( $key ) );
 		}
+
+		self::clear_site_cache();
+	}
+
+	/**
+	 * Loads the collections of the current mode.
+	 *
+	 * @param bool $refresh True to request the collections from WPCore.com. When the request fails, the cached values are used.
+	 */
+	public function collections( bool $refresh = false ): Result {
+		$connection = Connection::get();
+
+		return null === $connection ? $this->key_collections( $refresh ) : $this->site_collections( $connection, $refresh );
+	}
+
+	/**
+	 * Loads the collections assigned to the connected site.
+	 *
+	 * Collections read less than SITE_FRESH_FOR seconds ago come from the cache. Otherwise the site syncs with WPCore.com.
+	 * When the sync fails, the cached collections are returned with the error.
+	 * A status in SITE_REJECTED_STATUSES returns no collections. Pusher has deleted the cache.
+	 *
+	 * @param array{uuid: string, secret: string} $connection Saved connection.
+	 * @param bool                                $refresh    True to sync even when the cache is fresh.
+	 */
+	private function site_collections( array $connection, bool $refresh ): Result {
+		$cached = get_transient( self::SITE_CACHE );
+		$cached = is_array( $cached ) && isset( $cached['uuid'], $cached['read_at'], $cached['collections'] ) && $cached['uuid'] === $connection['uuid'] && is_array( $cached['collections'] ) ? $cached : null;
+
+		if ( ! $refresh && null !== $cached && time() - (int) $cached['read_at'] < self::SITE_FRESH_FOR ) {
+			return new Result( self::from_cache( $cached['collections'] ), array() );
+		}
+
+		$synced = Pusher::push();
+
+		if ( is_wp_error( $synced ) ) {
+			$data = $synced->get_error_data();
+
+			if ( is_array( $data ) && isset( $data['status'] ) && in_array( $data['status'], self::SITE_REJECTED_STATUSES, true ) ) {
+				return new Result( array(), array(), $synced );
+			}
+
+			return new Result( null === $cached ? array() : self::from_cache( $cached['collections'] ), array(), $synced );
+		}
+
+		return new Result( $synced, array() );
+	}
+
+	/**
+	 * Returns cached collections keyed by collection key.
+	 *
+	 * @param array<int, mixed> $items Collections in the format of Collection::to_array().
+	 * @return array<string, Collection>
+	 */
+	private static function from_cache( array $items ): array {
+		$collections = array();
+
+		foreach ( $items as $item ) {
+			$collection = Collection::from_array( $item );
+
+			if ( null !== $collection ) {
+				$collections[ $collection->key() ] = $collection;
+			}
+		}
+
+		return $collections;
 	}
 
 	/**
@@ -133,7 +276,7 @@ final class Repository {
 	 *
 	 * @param bool $refresh True to request every key. When the request fails, the cached values are used.
 	 */
-	public function collections( bool $refresh = false ): Result {
+	private function key_collections( bool $refresh ): Result {
 		$keys      = $this->keys();
 		$found     = array();
 		$not_found = array();

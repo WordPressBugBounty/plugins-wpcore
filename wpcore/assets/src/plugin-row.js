@@ -5,7 +5,7 @@ import { Button, ExternalLink, Spinner } from '@wordpress/components';
 // eslint-disable-next-line no-unused-vars
 import { createElement, Fragment, useState } from '@wordpress/element';
 import { decodeEntities } from '@wordpress/html-entities';
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 const AVATAR_COLORS = 8;
 
@@ -168,7 +168,7 @@ function Avatar( { slug, name, icon } ) {
  * One plugin of a collection: checkbox, name, source, installed state and the next action.
  *
  * @param {Object}                  props           Component props.
- * @param {Object}                  props.plugin    Plugin from the collections response.
+ * @param {Object}                  props.plugin    Plugin from the collections response. On the All tab it has collections, the names of every collection that lists it.
  * @param {string}                  props.icon      WordPress.org icon URL, if any.
  * @param {Object}                  props.progress  Progress from installInOrder(), if any.
  * @param {boolean}                 props.selected  True when the row is selected.
@@ -236,6 +236,19 @@ export default function PluginRow( {
 					) }
 					<code>{ plugin.slug }</code>
 				</span>
+				{ plugin.collections && plugin.collections.length > 1 && (
+					<span className="wpcore-plugin__in">
+						{ sprintf(
+							/* translators: %s: collection names separated by commas. */
+							__( 'In %s', 'wpcore' ),
+							plugin.collections
+								.map( ( collection ) =>
+									decodeEntities( collection )
+								)
+								.join( ', ' )
+						) }
+					</span>
+				) }
 				{ change && (
 					<span className="wpcore-plugin__change">
 						<span

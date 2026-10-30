@@ -15,11 +15,15 @@ use WPCore\Api\CollectionPlugin;
 use WPCore\Collections\Keys;
 use WPCore\Installer\Installer;
 use WPCore\Installer\PluginStatus;
+use WPCore\Sites\Connection;
+use WPCore\Sites\Pusher;
 
 /**
  * Installs and lists the plugins in WPCore collections.
  *
- * The collection keys come from the command line. The command does not read or change the saved keys in wpcore_keys.
+ * On a site that is not connected to WPCore.com, the collection keys come from the command line. The command does not read
+ * or change the saved keys in wpcore_keys. On a connected site, the command takes no keys and uses the collections assigned
+ * to the site on WPCore.com.
  */
 final class Command {
 
@@ -68,15 +72,16 @@ final class Command {
 	/**
 	 * Installs the plugins in one or more WPCore collections.
 	 *
+	 * A site connected to WPCore.com installs the collections assigned to it on its site page, and takes no keys.
 	 * A plugin listed in more than one collection is installed once. A plugin that is already installed is not downloaded again, unless --force is given.
 	 *
 	 * ## OPTIONS
 	 *
 	 * [<key>...]
-	 * : Collection keys. The key is shown at the top of each collection page on wpcore.com.
+	 * : Collection keys. The key is shown at the top of each collection page on wpcore.com. Leave out on a connected site.
 	 *
 	 * [--key=<key>]
-	 * : A collection key, or several keys separated by commas. Plugin 1.x used this form.
+	 * : A collection key, or several keys separated by commas. Plugin 1.x used this form. Leave out on a connected site.
 	 *
 	 * [--activate]
 	 * : Activate the plugins after installing them.
@@ -97,15 +102,22 @@ final class Command {
 	 *
 	 *     wp wpcore install 6ib8eOIBndO5u0DTrmOt --activate
 	 *     wp wpcore install --key=6ib8eOIBndO5u0DTrmOt --activate=yes
+	 *     wp wpcore install --activate
 	 *
 	 * @param string[]             $args       Collection keys.
 	 * @param array<string, mixed> $assoc_args Options.
 	 */
 	public function install( array $args, array $assoc_args ): void {
-		$options = self::install_options( $args, $assoc_args );
+		$connection = Connection::get();
+		$options    = self::install_options( $args, $assoc_args, null === $connection );
 
 		if ( is_wp_error( $options ) ) {
 			WP_CLI::error( $options->get_error_message() );
+			return;
+		}
+
+		if ( null !== $connection && array() !== $options['keys'] ) {
+			WP_CLI::error( self::site_mode_message() );
 			return;
 		}
 
@@ -114,7 +126,7 @@ final class Command {
 			return;
 		}
 
-		$plugins = self::unique_plugins( $this->collections( $options['keys'] ) );
+		$plugins = self::unique_plugins( null === $connection ? $this->collections( $options['keys'] ) : $this->site_collections() );
 
 		if ( array() === $plugins ) {
 			WP_CLI::error( __( 'The collections contain no plugins.', 'wpcore' ) );
@@ -159,10 +171,12 @@ final class Command {
 	/**
 	 * Lists the plugins in one or more WPCore collections and their status on this site.
 	 *
+	 * A site connected to WPCore.com lists the collections assigned to it on its site page, and takes no keys.
+	 *
 	 * ## OPTIONS
 	 *
-	 * <key>...
-	 * : Collection keys.
+	 * [<key>...]
+	 * : Collection keys. Leave out on a connected site.
 	 *
 	 * [--format=<format>]
 	 * : Output format.
@@ -185,16 +199,22 @@ final class Command {
 	 * @param array<string, mixed> $assoc_args Options.
 	 */
 	public function list_( array $args, array $assoc_args ): void {
-		$keys = self::keys( $args, array() );
+		$connection = Connection::get();
+		$keys       = self::keys( $args, array(), null === $connection );
 
 		if ( is_wp_error( $keys ) ) {
 			WP_CLI::error( $keys->get_error_message() );
 			return;
 		}
 
+		if ( null !== $connection && array() !== $keys ) {
+			WP_CLI::error( self::site_mode_message() );
+			return;
+		}
+
 		$plugins = array();
 
-		foreach ( $this->collections( $keys ) as $collection ) {
+		foreach ( null === $connection ? $this->collections( $keys ) : $this->site_collections() as $collection ) {
 			foreach ( $collection->plugins() as $plugin ) {
 				$plugins[] = array(
 					'collection' => $collection,
@@ -211,12 +231,13 @@ final class Command {
 	 *
 	 * --network and --activate-network both activate the plugins for the network, as --network=yes did in 1.x.
 	 *
-	 * @param string[]             $args       Positional arguments.
-	 * @param array<string, mixed> $assoc_args Options.
+	 * @param string[]             $args          Positional arguments.
+	 * @param array<string, mixed> $assoc_args    Options.
+	 * @param bool                 $keys_required True when no keys is an error. A connected site takes no keys.
 	 * @return array{keys: string[], activate: bool, network: bool, force: bool}|WP_Error
 	 */
-	public static function install_options( array $args, array $assoc_args ) {
-		$keys = self::keys( $args, $assoc_args );
+	public static function install_options( array $args, array $assoc_args, bool $keys_required = true ) {
+		$keys = self::keys( $args, $assoc_args, $keys_required );
 
 		if ( is_wp_error( $keys ) ) {
 			return $keys;
@@ -249,11 +270,12 @@ final class Command {
 	/**
 	 * Returns the collection keys from the positional arguments and the --key option, without repeats.
 	 *
-	 * @param string[]             $args       Positional arguments.
-	 * @param array<string, mixed> $assoc_args Options.
+	 * @param string[]             $args          Positional arguments.
+	 * @param array<string, mixed> $assoc_args    Options.
+	 * @param bool                 $keys_required True when no keys is an error.
 	 * @return string[]|WP_Error
 	 */
-	private static function keys( array $args, array $assoc_args ) {
+	private static function keys( array $args, array $assoc_args, bool $keys_required ) {
 		$values = $args;
 
 		if ( isset( $assoc_args['key'] ) ) {
@@ -286,7 +308,7 @@ final class Command {
 
 		$keys = Keys::normalize( $keys );
 
-		if ( array() === $keys ) {
+		if ( $keys_required && array() === $keys ) {
 			return new WP_Error( 'wpcore_no_keys', __( 'Give at least one collection key.', 'wpcore' ) );
 		}
 
@@ -354,6 +376,35 @@ final class Command {
 		}
 
 		return $collections;
+	}
+
+	/**
+	 * Syncs with WPCore.com and returns the collections assigned to this site.
+	 *
+	 * Stops the command when the sync fails or no collection is assigned.
+	 *
+	 * @return array<string, Collection> Collections keyed by key, in the order they were assigned.
+	 */
+	private function site_collections(): array {
+		$collections = Pusher::push();
+
+		if ( is_wp_error( $collections ) ) {
+			WP_CLI::error( $collections->get_error_message() );
+			return array();
+		}
+
+		if ( array() === $collections ) {
+			WP_CLI::error( __( 'No collections are assigned to this site. Assign collections on the site page on WPCore.com.', 'wpcore' ) );
+		}
+
+		return $collections;
+	}
+
+	/**
+	 * Returns the error for collection keys given on a site connected to WPCore.com.
+	 */
+	private static function site_mode_message(): string {
+		return __( 'This site is connected to WPCore.com and uses the collections assigned to it there. Run the command without collection keys.', 'wpcore' );
 	}
 
 	/**

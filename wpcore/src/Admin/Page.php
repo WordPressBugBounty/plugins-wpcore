@@ -101,9 +101,7 @@ final class Page {
 			self::HANDLE,
 			'window.wpcoreAdmin = ' . wp_json_encode(
 				array(
-					'exportActiveUrl' => Export::active_plugins_url(),
-					'exportAllUrl'    => Export::all_plugins_url(),
-					'createUrl'       => 'https://wpcore.com/collections/create',
+					'createUrl' => 'https://wpcore.com/collections/create',
 				)
 			) . ';',
 			'before'

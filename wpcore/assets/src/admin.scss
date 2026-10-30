@@ -16,7 +16,7 @@ $wpcore-radius: 8px;
 $wpcore-avatar-colors: #3858e9, #00a32a, #d63638, #9b51e0, #dba617, #007cba, #e65054, #0a7b83;
 
 .wpcore-admin {
-	max-width: 960px;
+	max-width: 1280px;
 	padding-bottom: 96px;
 	color: $wpcore-text;
 
@@ -66,15 +66,77 @@ $wpcore-avatar-colors: #3858e9, #00a32a, #d63638, #9b51e0, #dba617, #007cba, #e6
 	}
 }
 
+// Collections on the left. Site connection on the right.
+.wpcore-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 300px;
+	gap: 20px;
+	align-items: start;
+}
+
+.wpcore-main {
+	min-width: 0;
+}
+
+.wpcore-sidebar {
+	position: sticky;
+	top: 48px;
+
+	.wpcore-add-key__row {
+		flex-direction: column;
+
+		.components-base-control {
+			max-width: none;
+		}
+	}
+}
+
+.wpcore-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px 16px;
+	padding: 12px 16px;
+}
+
 .wpcore-add-key {
+	flex: 1 1 360px;
+}
 
-	h2 {
-		margin-bottom: 12px;
+.wpcore-toolbar__site {
+	display: flex;
+	flex: 1 1 360px;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+
+	p {
+		margin: 0;
+	}
+}
+
+.wpcore-toolbar__refresh {
+	margin-left: auto;
+}
+
+.wpcore-site {
+	padding: 16px 20px;
+
+	p {
+		margin: 12px 0 0;
 	}
 
-	.description {
-		margin: 8px 0 0;
+	.components-notice {
+		margin: 12px 0 0;
 	}
+}
+
+.wpcore-site__header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
 }
 
 .wpcore-add-key__row {
@@ -97,6 +159,19 @@ $wpcore-avatar-colors: #3858e9, #00a32a, #d63638, #9b51e0, #dba617, #007cba, #e6
 
 	.components-button {
 		height: 36px;
+	}
+}
+
+// Tabs for two or more collections. The All tab lists each plugin once.
+.wpcore-tabs .components-tab-panel__tabs {
+	display: flex;
+	overflow-x: auto;
+	margin: 0 0 12px;
+	border-bottom: 1px solid $wpcore-border;
+
+	.components-tab-panel__tabs-item {
+		flex: 0 0 auto;
+		white-space: nowrap;
 	}
 }
 
@@ -392,6 +467,11 @@ $wpcore-avatar-colors: #3858e9, #00a32a, #d63638, #9b51e0, #dba617, #007cba, #e6
 	border-radius: 4px;
 }
 
+.wpcore-plugin__in {
+	font-size: 12px;
+	color: $wpcore-muted;
+}
+
 .wpcore-plugin__change {
 	display: inline-flex;
 	align-items: center;
@@ -472,24 +552,11 @@ $wpcore-avatar-colors: #3858e9, #00a32a, #d63638, #9b51e0, #dba617, #007cba, #e6
 	}
 }
 
-.wpcore-export {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	justify-content: space-between;
-	gap: 16px;
-	margin-top: 32px;
-
-	p {
-		margin: 4px 0 0;
-		color: $wpcore-muted;
-	}
-}
-
-.wpcore-export__actions {
+.wpcore-site__actions {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
+	margin-top: 12px;
 }
 
 .wpcore-selection-bar {
@@ -572,6 +639,32 @@ $wpcore-avatar-colors: #3858e9, #00a32a, #d63638, #9b51e0, #dba617, #007cba, #e6
 	margin-top: 24px;
 }
 
+// One column: Site connection above the collections.
+@media (max-width: 1100px) {
+
+	.wpcore-layout {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+	}
+
+	.wpcore-sidebar {
+		display: contents;
+
+		.wpcore-add-key__row {
+			flex-direction: row;
+
+			.components-base-control {
+				max-width: 420px;
+			}
+		}
+	}
+
+	.wpcore-site {
+		order: -1;
+	}
+}
+
 @media (max-width: 600px) {
 
 	.wpcore-card {
@@ -611,7 +704,8 @@ $wpcore-avatar-colors: #3858e9, #00a32a, #d63638, #9b51e0, #dba617, #007cba, #e6
 		}
 	}
 
-	.wpcore-add-key__row {
+	.wpcore-add-key__row,
+	.wpcore-sidebar .wpcore-add-key__row {
 		flex-direction: column;
 	}
 

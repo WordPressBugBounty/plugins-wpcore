@@ -2,8 +2,8 @@
 /**
  * Plugin Name:       WPCore Plugin Manager
  * Plugin URI:        https://wpcore.com
- * Description:       Install the plugins from your WPCore.com collections on any WordPress site.
- * Version:           2.0.1
+ * Description:       See your WordPress sites on WPCore.com with their versions, plugins and themes, and install the plugins of the collections assigned to each site.
+ * Version:           2.1.0
  * Requires at least: 6.4
  * Requires PHP:      7.4
  * Author:            WPCore

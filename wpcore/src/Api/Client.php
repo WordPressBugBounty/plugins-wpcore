@@ -27,6 +27,23 @@ final class Client {
 	const TIMEOUT = 10;
 
 	/**
+	 * Returns the API base URL, ending in a slash.
+	 *
+	 * The WPCORE_API_URL constant in wp-config.php replaces the default. The wpcore_api_url filter runs after it.
+	 * Both point a test site at a local wpcore.com app.
+	 */
+	public static function base_url(): string {
+		$default = defined( 'WPCORE_API_URL' ) ? (string) constant( 'WPCORE_API_URL' ) : self::DEFAULT_URL;
+
+		/**
+		 * Filters the WPCore API base URL. Collection keys and the site report path are appended to it.
+		 *
+		 * @param string $url API base URL.
+		 */
+		return trailingslashit( (string) apply_filters( 'wpcore_api_url', $default ) );
+	}
+
+	/**
 	 * Requests collections by key.
 	 *
 	 * The result is keyed by the requested key. A requested key that matches no collection is not in the result.
@@ -42,12 +59,7 @@ final class Client {
 			return array();
 		}
 
-		/**
-		 * Filters the WPCore API base URL. The comma-separated keys are appended to it.
-		 *
-		 * @param string $url API base URL.
-		 */
-		$base_url = (string) apply_filters( 'wpcore_api_url', self::DEFAULT_URL );
+		$base_url = self::base_url();
 
 		$response = wp_remote_get(
 			$base_url . implode( ',', array_map( 'rawurlencode', $keys ) ),

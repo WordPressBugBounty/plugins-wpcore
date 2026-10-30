@@ -2,7 +2,7 @@
  * WordPress dependencies
  */
 import apiFetch from '@wordpress/api-fetch';
-import { Button, Notice, Spinner } from '@wordpress/components';
+import { Button, Notice, Spinner, TabPanel } from '@wordpress/components';
 import {
 	// eslint-disable-next-line no-unused-vars
 	createElement,
@@ -11,6 +11,7 @@ import {
 	useEffect,
 	useState,
 } from '@wordpress/element';
+import { decodeEntities } from '@wordpress/html-entities';
 import { __, _n, sprintf } from '@wordpress/i18n';
 
 /**
@@ -18,13 +19,20 @@ import { __, _n, sprintf } from '@wordpress/i18n';
  */
 import AddKeyForm from './add-key-form';
 import CollectionCard from './collection-card';
+import SiteConnection from './site-connection';
 import {
 	installInOrder,
+	mergedPlugins,
 	progressCounts,
 	selectedPlugins,
 } from './install-queue';
 
 const ROUTE = '/wpcore/v1';
+
+/**
+ * Name of the tab that lists the plugins of every collection. Collection keys cannot contain a colon, so no key matches it.
+ */
+const ALL_TAB = 'wpcore:all';
 
 /**
  * Returns the sentence that reports the result of an install run.
@@ -90,13 +98,14 @@ function summaryText( counts ) {
 /**
  * The WPCore admin screen.
  *
- * @param {Object} props                 Component props, from window.wpcoreAdmin.
- * @param {string} props.exportActiveUrl wpcore.com link that creates a collection from the active plugins.
- * @param {string} props.exportAllUrl    wpcore.com link that creates a collection from all installed plugins.
- * @param {string} props.createUrl       wpcore.com page that creates an empty collection.
+ * In collections mode the screen lists the collections whose keys are saved on this site.
+ * In site mode, while the site is connected to WPCore.com, it lists the collections assigned to the site on its site page.
+ *
+ * @param {Object} props           Component props, from window.wpcoreAdmin.
+ * @param {string} props.createUrl wpcore.com page that creates an empty collection.
  * @return {Element} Admin screen.
  */
-export default function App( { exportActiveUrl, exportAllUrl, createUrl } ) {
+export default function App( { createUrl } ) {
 	const [ data, setData ] = useState( null );
 	const [ busy, setBusy ] = useState( true );
 	const [ installing, setInstalling ] = useState( false );
@@ -217,10 +226,35 @@ export default function App( { exportActiveUrl, exportAllUrl, createUrl } ) {
 		setShowSummary( true );
 	};
 
+	/**
+	 * Returns the card of one collection, or of every collection on the All tab.
+	 *
+	 * @param {Object} collection Collection, or the All tab entry.
+	 * @return {Element} Collection card.
+	 */
+	const renderCard = ( collection ) => (
+		<CollectionCard
+			key={ collection.key }
+			collection={ collection }
+			icons={ icons }
+			selected={ selected }
+			onSelect={ select }
+			onInstall={ install }
+			progress={ progress }
+			onRemove={
+				ALL_TAB === collection.key || 'site' === data.mode
+					? undefined
+					: () => removeKey( collection.key )
+			}
+			disabled={ busy }
+		/>
+	);
+
 	const selectedList = data
 		? selectedPlugins( data.collections, selected )
 		: [];
 	const counts = progressCounts( progress );
+	const siteMode = data && 'site' === data.mode;
 	const hasKeys =
 		data &&
 		( data.collections.length > 0 || data.not_found_keys.length > 0 );
@@ -244,16 +278,6 @@ export default function App( { exportActiveUrl, exportAllUrl, createUrl } ) {
 						) }
 					</p>
 				</div>
-				{ data && data.collections.length > 0 && (
-					<Button
-						variant="secondary"
-						icon="update"
-						disabled={ busy }
-						onClick={ () => loadCollections( true ) }
-					>
-						{ __( 'Refresh from WPCore.com', 'wpcore' ) }
-					</Button>
-				) }
 			</header>
 
 			{ requestError && (
@@ -267,13 +291,44 @@ export default function App( { exportActiveUrl, exportAllUrl, createUrl } ) {
 
 			{ data && data.error && (
 				<Notice status="warning" isDismissible={ false }>
+					{ siteMode
+						? sprintf(
+								/* translators: %s: error message. */
+								__(
+									'The collections assigned to this site could not be loaded: %s',
+									'wpcore'
+								),
+								data.error.message
+							)
+						: sprintf(
+								/* translators: %s: error message. */
+								__(
+									'Some collections could not be loaded: %s',
+									'wpcore'
+								),
+								data.error.message
+							) }
+				</Notice>
+			) }
+
+			{ data && ! siteMode && (
+				<Notice status="warning" isDismissible={ false }>
+					{ __(
+						'Collection keys will be removed in a later version of WPCore. Connect this site to WPCore.com in the Site connection box, then assign collections to it on its site page.',
+						'wpcore'
+					) }
+				</Notice>
+			) }
+
+			{ siteMode && data.unused_keys.length > 0 && (
+				<Notice status="info" isDismissible={ false }>
 					{ sprintf(
-						/* translators: %s: error message. */
+						/* translators: %s: comma-separated collection keys. */
 						__(
-							'Some collections could not be loaded: %s',
+							'This site is connected to WPCore.com, so it does not use the collection keys saved before it connected: %s. Assign your own collections on the site page on WPCore.com. To use a collection that belongs to someone else, clone it on WPCore.com first. The keys are used again if you disconnect.',
 							'wpcore'
 						),
-						data.error.message
+						data.unused_keys.join( ', ' )
 					) }
 				</Notice>
 			) }
@@ -287,198 +342,286 @@ export default function App( { exportActiveUrl, exportAllUrl, createUrl } ) {
 				</Notice>
 			) }
 
-			<AddKeyForm onAdd={ addKey } disabled={ busy } />
-
-			{ ! data && busy && (
-				<div className="wpcore-card wpcore-loading">
-					<Spinner />
-					{ __( 'Loading your collections…', 'wpcore' ) }
-				</div>
-			) }
-
-			{ data && ! hasKeys && (
-				<div className="wpcore-card wpcore-empty">
-					<span
-						className="dashicons dashicons-portfolio"
-						aria-hidden="true"
-					/>
-					<h2>{ __( 'No collections yet', 'wpcore' ) }</h2>
-					<p>
-						{ __(
-							'Add a collection key above to list its plugins here.',
-							'wpcore'
-						) }
-					</p>
-					<Button
-						variant="secondary"
-						href={ createUrl }
-						target="_blank"
-						rel="noreferrer"
+			<div className="wpcore-layout">
+				<div className="wpcore-main">
+					<section
+						className="wpcore-card wpcore-toolbar"
+						aria-label={
+							siteMode
+								? __( 'Assigned collections', 'wpcore' )
+								: __( 'Collection keys', 'wpcore' )
+						}
 					>
-						{ __( 'Create a collection on WPCore.com', 'wpcore' ) }
-					</Button>
-				</div>
-			) }
-
-			{ data &&
-				data.not_found_keys.map( ( key ) => (
-					<div key={ key } className="wpcore-card wpcore-missing">
-						<span
-							className="dashicons dashicons-warning"
-							aria-hidden="true"
-						/>
-						<p>
-							{ sprintf(
-								/* translators: %s: collection key. */
-								__(
-									'No collection on WPCore.com has the key %s.',
-									'wpcore'
-								),
-								key
-							) }
-						</p>
-						<Button
-							variant="link"
-							isDestructive
-							disabled={ busy }
-							onClick={ () => removeKey( key ) }
-						>
-							{ __( 'Remove key', 'wpcore' ) }
-						</Button>
-					</div>
-				) ) }
-
-			{ data &&
-				data.collections.map( ( collection ) => (
-					<CollectionCard
-						key={ collection.key }
-						collection={ collection }
-						icons={ icons }
-						selected={ selected }
-						onSelect={ select }
-						onInstall={ install }
-						progress={ progress }
-						onRemove={ () => removeKey( collection.key ) }
-						disabled={ busy }
-					/>
-				) ) }
-
-			{ hasCustom && (
-				<p className="description">
-					{ __(
-						'Custom ZIP plugins download from the file URL saved on WPCore.com. They do not come from the WordPress.org plugin directory.',
-						'wpcore'
-					) }
-				</p>
-			) }
-
-			<section className="wpcore-card wpcore-export">
-				<div>
-					<h2>
-						{ __( 'Export plugins to a collection', 'wpcore' ) }
-					</h2>
-					<p>
-						{ __(
-							'Create a WPCore.com collection from the plugins on this site.',
-							'wpcore'
-						) }
-					</p>
-				</div>
-				<div className="wpcore-export__actions">
-					<Button
-						variant="secondary"
-						href={ exportActiveUrl }
-						target="_blank"
-					>
-						{ __( 'Export active plugins', 'wpcore' ) }
-					</Button>
-					<Button
-						variant="secondary"
-						href={ exportAllUrl }
-						target="_blank"
-					>
-						{ __( 'Export all plugins', 'wpcore' ) }
-					</Button>
-				</div>
-			</section>
-
-			{ ( installing || selectedList.length > 0 ) && (
-				<div
-					className="wpcore-selection-bar"
-					role="region"
-					aria-label={ __( 'Selected plugins', 'wpcore' ) }
-				>
-					{ installing ? (
-						<div className="wpcore-selection-bar__progress">
-							<Spinner />
-							<span aria-live="polite">
-								{ sprintf(
-									/* translators: 1: number of finished plugins, 2: number of plugins in this run. */
-									__( 'Installing %1$d of %2$d…', 'wpcore' ),
-									Math.min(
-										counts.finished + 1,
-										counts.total
-									),
-									counts.total
-								) }
-							</span>
-							<span className="wpcore-meter" aria-hidden="true">
-								<span
-									style={ {
-										width: `${
-											( counts.finished /
-												Math.max( counts.total, 1 ) ) *
-											100
-										}%`,
-									} }
-								/>
-							</span>
-						</div>
-					) : (
-						<>
-							<strong>
-								{ sprintf(
-									/* translators: %d: number of selected plugins. */
-									_n(
-										'%d plugin selected',
-										'%d plugins selected',
-										selectedList.length,
+						{ siteMode ? (
+							<div className="wpcore-toolbar__site">
+								<p>
+									{ __(
+										'This site lists the collections assigned to it on WPCore.com.',
 										'wpcore'
-									),
-									selectedList.length
-								) }
-							</strong>
-							<Button
-								variant="tertiary"
-								disabled={ busy }
-								onClick={ () => setSelected( new Set() ) }
-							>
-								{ __( 'Clear selection', 'wpcore' ) }
-							</Button>
-							<span className="wpcore-selection-bar__actions">
+									) }
+								</p>
 								<Button
 									variant="secondary"
-									disabled={ busy }
-									onClick={ () =>
-										install( selectedList, false )
-									}
+									href={ data.site_url }
+									target="_blank"
+									rel="noreferrer"
 								>
-									{ __( 'Install', 'wpcore' ) }
+									{ __(
+										'Assign collections on WPCore.com',
+										'wpcore'
+									) }
 								</Button>
+							</div>
+						) : (
+							<AddKeyForm onAdd={ addKey } disabled={ busy } />
+						) }
+						{ data &&
+							( siteMode || data.collections.length > 0 ) && (
 								<Button
-									variant="primary"
+									className="wpcore-toolbar__refresh"
+									variant="secondary"
+									icon="update"
 									disabled={ busy }
-									onClick={ () =>
-										install( selectedList, true )
-									}
+									onClick={ () => loadCollections( true ) }
 								>
-									{ __( 'Install and activate', 'wpcore' ) }
+									{ __(
+										'Refresh from WPCore.com',
+										'wpcore'
+									) }
 								</Button>
-							</span>
-						</>
+							) }
+					</section>
+
+					{ ! data && busy && (
+						<div className="wpcore-card wpcore-loading">
+							<Spinner />
+							{ __( 'Loading your collections…', 'wpcore' ) }
+						</div>
+					) }
+
+					{ data && ! hasKeys && (
+						<div className="wpcore-card wpcore-empty">
+							<span
+								className="dashicons dashicons-portfolio"
+								aria-hidden="true"
+							/>
+							<h2>
+								{ siteMode
+									? __( 'No collections assigned', 'wpcore' )
+									: __( 'No collections yet', 'wpcore' ) }
+							</h2>
+							<p>
+								{ siteMode
+									? __(
+											'Assign collections to this site on its site page on WPCore.com to list their plugins here.',
+											'wpcore'
+										)
+									: __(
+											'Add a collection key above to list its plugins here.',
+											'wpcore'
+										) }
+							</p>
+							<Button
+								variant="secondary"
+								href={ siteMode ? data.site_url : createUrl }
+								target="_blank"
+								rel="noreferrer"
+							>
+								{ siteMode
+									? __(
+											'Assign collections on WPCore.com',
+											'wpcore'
+										)
+									: __(
+											'Create a collection on WPCore.com',
+											'wpcore'
+										) }
+							</Button>
+						</div>
+					) }
+
+					{ data &&
+						data.not_found_keys.map( ( key ) => (
+							<div
+								key={ key }
+								className="wpcore-card wpcore-missing"
+							>
+								<span
+									className="dashicons dashicons-warning"
+									aria-hidden="true"
+								/>
+								<p>
+									{ sprintf(
+										/* translators: %s: collection key. */
+										__(
+											'No collection on WPCore.com has the key %s.',
+											'wpcore'
+										),
+										key
+									) }
+								</p>
+								<Button
+									variant="link"
+									isDestructive
+									disabled={ busy }
+									onClick={ () => removeKey( key ) }
+								>
+									{ __( 'Remove key', 'wpcore' ) }
+								</Button>
+							</div>
+						) ) }
+
+					{ data &&
+						1 === data.collections.length &&
+						renderCard( data.collections[ 0 ] ) }
+
+					{ data && data.collections.length > 1 && (
+						<TabPanel
+							className="wpcore-tabs"
+							tabs={ [
+								{
+									name: ALL_TAB,
+									title: __( 'All', 'wpcore' ),
+								},
+								...data.collections.map( ( collection ) => ( {
+									name: collection.key,
+									title: decodeEntities( collection.name ),
+								} ) ),
+							] }
+						>
+							{ ( tab ) => {
+								if ( ALL_TAB === tab.name ) {
+									return renderCard( {
+										key: ALL_TAB,
+										name: __( 'All collections', 'wpcore' ),
+										plugins: mergedPlugins(
+											data.collections
+										),
+									} );
+								}
+
+								const collection = data.collections.find(
+									( item ) => item.key === tab.name
+								);
+
+								return collection
+									? renderCard( collection )
+									: null;
+							} }
+						</TabPanel>
+					) }
+
+					{ hasCustom && (
+						<p className="description">
+							{ __(
+								'Custom ZIP plugins download from the file URL saved on WPCore.com. They do not come from the WordPress.org plugin directory.',
+								'wpcore'
+							) }
+						</p>
+					) }
+
+					{ ( installing || selectedList.length > 0 ) && (
+						<div
+							className="wpcore-selection-bar"
+							role="region"
+							aria-label={ __( 'Selected plugins', 'wpcore' ) }
+						>
+							{ installing ? (
+								<div className="wpcore-selection-bar__progress">
+									<Spinner />
+									<span aria-live="polite">
+										{ sprintf(
+											/* translators: 1: number of finished plugins, 2: number of plugins in this run. */
+											__(
+												'Installing %1$d of %2$d…',
+												'wpcore'
+											),
+											Math.min(
+												counts.finished + 1,
+												counts.total
+											),
+											counts.total
+										) }
+									</span>
+									<span
+										className="wpcore-meter"
+										aria-hidden="true"
+									>
+										<span
+											style={ {
+												width: `${
+													( counts.finished /
+														Math.max(
+															counts.total,
+															1
+														) ) *
+													100
+												}%`,
+											} }
+										/>
+									</span>
+								</div>
+							) : (
+								<>
+									<strong>
+										{ sprintf(
+											/* translators: %d: number of selected plugins. */
+											_n(
+												'%d plugin selected',
+												'%d plugins selected',
+												selectedList.length,
+												'wpcore'
+											),
+											selectedList.length
+										) }
+									</strong>
+									<Button
+										variant="tertiary"
+										disabled={ busy }
+										onClick={ () =>
+											setSelected( new Set() )
+										}
+									>
+										{ __( 'Clear selection', 'wpcore' ) }
+									</Button>
+									<span className="wpcore-selection-bar__actions">
+										<Button
+											variant="secondary"
+											disabled={ busy }
+											onClick={ () =>
+												install( selectedList, false )
+											}
+										>
+											{ __( 'Install', 'wpcore' ) }
+										</Button>
+										<Button
+											variant="primary"
+											disabled={ busy }
+											onClick={ () =>
+												install( selectedList, true )
+											}
+										>
+											{ __(
+												'Install and activate',
+												'wpcore'
+											) }
+										</Button>
+									</span>
+								</>
+							) }
+						</div>
 					) }
 				</div>
-			) }
+				<aside className="wpcore-sidebar">
+					<SiteConnection
+						onModeChange={ () => {
+							setSelected( new Set() );
+							// Saving a key syncs and caches the assigned collections, so the reload reads the cache.
+							loadCollections();
+						} }
+					/>
+				</aside>
+			</div>
 		</div>
 	);
 }

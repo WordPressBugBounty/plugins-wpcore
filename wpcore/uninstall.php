@@ -12,6 +12,7 @@ if ( ! defined( 'WP_UNINSTALL_PLUGIN' ) ) {
 require_once __DIR__ . '/src/Api/PluginIcons.php';
 require_once __DIR__ . '/src/Collections/Keys.php';
 require_once __DIR__ . '/src/Collections/Repository.php';
+require_once __DIR__ . '/src/Sites/Connection.php';
 require_once __DIR__ . '/src/Upgrade.php';
 
 /**
@@ -26,6 +27,8 @@ function wpcore_uninstall_site() {
 	delete_option( WPCore\Upgrade::VERSION_OPTION );
 	delete_transient( WPCore\Upgrade::LEGACY_TRANSIENT );
 	delete_transient( WPCore\Api\PluginIcons::CACHE );
+	delete_option( WPCore\Sites\Connection::OPTION );
+	delete_transient( WPCore\Collections\Repository::SITE_CACHE );
 }
 
 if ( is_multisite() ) {

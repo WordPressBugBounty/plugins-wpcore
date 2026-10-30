@@ -3,44 +3,43 @@
  */
 
 /**
- * Returns the ID of a plugin row. A plugin listed in two collections has two rows.
- *
- * @param {string} key  Collection key.
- * @param {string} slug Plugin slug.
- * @return {string} Row ID.
- */
-export function rowId( key, slug ) {
-	return `${ key }/${ slug }`;
-}
-
-/**
- * Returns the selected plugins in collection order. A slug selected in more than one collection is listed once.
+ * Returns each plugin of the collections once, in collection order.
+ * A slug listed in more than one collection keeps the entry of the first collection, and that collection's key installs it.
  *
  * @param {Array<Object>} collections Collections from GET /wpcore/v1/collections.
- * @param {Set<string>}   selected    Selected row IDs.
- * @return {Array<{key: string, slug: string, name: string}>} Plugins to install.
+ * @return {Array<Object>} Plugins with key, the collection that installs the plugin, and collections, the names of every collection that lists it.
  */
-export function selectedPlugins( collections, selected ) {
-	const plugins = [];
-	const slugs = new Set();
+export function mergedPlugins( collections ) {
+	const plugins = new Map();
 
 	for ( const collection of collections ) {
 		for ( const plugin of collection.plugins ) {
-			if (
-				selected.has( rowId( collection.key, plugin.slug ) ) &&
-				! slugs.has( plugin.slug )
-			) {
-				slugs.add( plugin.slug );
-				plugins.push( {
+			if ( ! plugins.has( plugin.slug ) ) {
+				plugins.set( plugin.slug, {
+					...plugin,
 					key: collection.key,
-					slug: plugin.slug,
-					name: plugin.name,
+					collections: [],
 				} );
 			}
+
+			plugins.get( plugin.slug ).collections.push( collection.name );
 		}
 	}
 
-	return plugins;
+	return [ ...plugins.values() ];
+}
+
+/**
+ * Returns the selected plugins in collection order, each slug once.
+ *
+ * @param {Array<Object>} collections Collections from GET /wpcore/v1/collections.
+ * @param {Set<string>}   selected    Selected slugs.
+ * @return {Array<{key: string, slug: string, name: string}>} Plugins to install.
+ */
+export function selectedPlugins( collections, selected ) {
+	return mergedPlugins( collections )
+		.filter( ( plugin ) => selected.has( plugin.slug ) )
+		.map( ( { key, slug, name } ) => ( { key, slug, name } ) );
 }
 
 /**

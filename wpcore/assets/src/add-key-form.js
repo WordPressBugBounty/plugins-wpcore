@@ -7,7 +7,7 @@ import { Button, TextControl } from '@wordpress/components';
 import { __ } from '@wordpress/i18n';
 
 /**
- * Form that saves a collection key.
+ * Form in the top bar of the WPCore screen that saves a collection key.
  *
  * @param {Object}                             props          Component props.
  * @param {function(string): Promise<boolean>} props.onAdd    Saves a key and resolves with true on success.
@@ -30,13 +30,15 @@ export default function AddKeyForm( { onAdd, disabled } ) {
 	};
 
 	return (
-		<form className="wpcore-card wpcore-add-key" onSubmit={ submit }>
-			<h2>{ __( 'Add a collection', 'wpcore' ) }</h2>
+		<form className="wpcore-add-key" onSubmit={ submit }>
 			<div className="wpcore-add-key__row">
 				<TextControl
 					label={ __( 'Collection key', 'wpcore' ) }
 					hideLabelFromVision
-					placeholder={ __( 'Paste a collection key', 'wpcore' ) }
+					placeholder={ __(
+						'Paste a collection key from WPCore.com',
+						'wpcore'
+					) }
 					value={ key }
 					onChange={ setKey }
 					disabled={ disabled }
@@ -51,12 +53,6 @@ export default function AddKeyForm( { onAdd, disabled } ) {
 					{ __( 'Add collection', 'wpcore' ) }
 				</Button>
 			</div>
-			<p className="description">
-				{ __(
-					'The key is shown at the top of each collection page on WPCore.com.',
-					'wpcore'
-				) }
-			</p>
 		</form>
 	);
 }

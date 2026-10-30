@@ -15,7 +15,7 @@ final class Plugin {
 	/**
 	 * Plugin version. It must match the Version header in wpcore.php and the Stable tag in readme.txt.
 	 */
-	const VERSION = '2.0.1';
+	const VERSION = '2.1.0';
 
 	/**
 	 * Absolute path to wpcore.php.
@@ -36,6 +36,8 @@ final class Plugin {
 		add_action( 'rest_api_init', array( self::class, 'register_rest_routes' ) );
 
 		Admin\Page::register();
+		Sites\Changes::register();
+		Sites\Deactivation::register( $file );
 
 		if ( defined( 'WP_CLI' ) && WP_CLI ) {
 			Cli\Command::register();
@@ -53,6 +55,8 @@ final class Plugin {
 		);
 
 		$controller->register_routes();
+
+		( new Rest\SitesController() )->register_routes();
 	}
 
 	/**
